@@ -62,6 +62,10 @@ func (m model) View() string {
 }
 
 func main() {
+	f, _ := tea.LogToFile("debug.log", "")
+	defer f.Close()
+	log.Printf("Start")
+
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	_, err := p.Run()
 	if err != nil {
