@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"log"
 	"strconv"
+	"time"
 )
 
 type model struct {
@@ -15,6 +16,8 @@ type model struct {
 	feedback      string
 	responseTable table.Model
 	styles        *Styles
+
+	debounceEnterKey bool
 }
 
 func initialModel() model {
@@ -43,24 +46,37 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+type debounceEnterKey bool
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case debounceEnterKey:
+		if msg {
+			m.debounceEnterKey = false
+			return m, nil
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 		case "enter":
+			if m.debounceEnterKey {
+				return m, nil
+			}
+			m.debounceEnterKey = true
 			m.feedback = "Loading"
 			resp, err := ExecuteRequest(m.inputField.Value())
 			if err != nil {
 				m.feedback = m.styles.Error.Render(err.Error())
-				return m, nil
 			} else {
 				m.feedback = m.styles.Success.Render("Successfully")
+				m.requestTime = resp
 			}
-			m.requestTime = resp
+			return m, tea.Tick(m.requestTime.contentTransfer, func(_ time.Time) tea.Msg {
+				return debounceEnterKey(m.debounceEnterKey)
+			})
 		}
 	}
 	m.inputField, cmd = m.inputField.Update(msg)
