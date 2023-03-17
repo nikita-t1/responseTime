@@ -1,16 +1,20 @@
 package main
 
 import (
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"log"
+	"strconv"
 )
 
 type model struct {
-	inputField textinput.Model
-	feedback   string
-	styles     *Styles
+	requestTime   RequestTime
+	inputField    textinput.Model
+	feedback      string
+	responseTable table.Model
+	styles        *Styles
 }
 
 func initialModel() model {
@@ -19,6 +23,16 @@ func initialModel() model {
 	ti := textinput.New()
 	ti.Placeholder = "https://google.com"
 	ti.Focus()
+
+	responseTable := table.New(
+		table.WithColumns(
+			[]table.Column{
+				{Title: "", Width: 36},
+				{Title: "", Width: 56},
+			}),
+		table.WithHeight(20),
+	)
+	m.responseTable = responseTable
 
 	m.styles = DefaultStyles()
 	m.inputField = ti
@@ -39,12 +53,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			m.feedback = "Loading"
-			_, err := ExecuteRequest(m.inputField.Value())
+			resp, err := ExecuteRequest(m.inputField.Value())
 			if err != nil {
 				m.feedback = m.styles.Error.Render(err.Error())
+				return m, nil
 			} else {
 				m.feedback = m.styles.Success.Render("Successfully")
 			}
+			m.requestTime = resp
 		}
 	}
 	m.inputField, cmd = m.inputField.Update(msg)
@@ -56,6 +72,7 @@ func (m model) View() string {
 		lipgloss.Center,
 		m.styles.InputField.Render(m.inputField.View()),
 		m.feedback,
+		m.responseTableView(),
 	)
 }
 
@@ -69,4 +86,35 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (m model) responseTableView() string {
+	r := m.requestTime
+
+	var ipList []table.Row
+	for index, addr := range r.addrs {
+		ipList = append(ipList, table.Row{"        " + strconv.Itoa(index+1), addr.IP.String()})
+	}
+
+	var rows []table.Row
+	rows = []table.Row{
+		{"ID", strconv.Itoa(r.id)},
+		{"URL", r.url},
+		{"IP", r.ip},
+		{"Status", r.status},
+		{"DNS Lookup", r.dnsLookup.String()},
+		{"TCP Connection", r.connectTime.String()},
+		{"TLS Handshake", r.tlsHandshake.String()},
+		{"Server Processing", r.serverProcessing.String()},
+		{"Content Transfer", r.contentTransfer.String()},
+		{"", ""},
+		{"Alternative Addrs:", ""},
+	}
+	rows = append(rows, ipList...)
+	m.responseTable.SetRows(rows)
+
+	m.responseTable.SetStyles(m.styles.Table)
+
+	return m.responseTable.View()
+
 }

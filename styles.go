@@ -1,9 +1,13 @@
 package main
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
+)
 
 type Styles struct {
 	InputField lipgloss.Style
+	Table      table.Styles
 	Error      lipgloss.Style
 	Success    lipgloss.Style
 }
@@ -25,5 +29,15 @@ func DefaultStyles() *Styles {
 		Light: "39",
 		Dark:  "86",
 	})
+
+	s.Table = table.DefaultStyles()
+	s.Table.Selected = s.Table.Selected.
+		//Foreground(lipgloss.Color("#FFFFFF")).
+		//Foreground(lipgloss.Color("229")).
+		//Background(lipgloss.Color("17")).
+		UnsetForeground().
+		UnsetBackground().
+		Bold(true)
+
 	return &s
 }
