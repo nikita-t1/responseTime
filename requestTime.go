@@ -55,6 +55,8 @@ func isValidUrl(urlToTest string) (string, error) {
 	return urlToTest, nil
 }
 
+var counter = 0
+
 func ExecuteRequest(siteUrl string) (RequestTime, error) {
 
 	siteUrl, err := isValidUrl(siteUrl)
@@ -69,6 +71,7 @@ func ExecuteRequest(siteUrl string) (RequestTime, error) {
 
 	var start, connect, dns, tlsHandshake time.Time
 	requestTime := NewRequestTime()
+	requestTime.url = siteUrl
 
 	trace := &httptrace.ClientTrace{
 		DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
@@ -115,6 +118,9 @@ func ExecuteRequest(siteUrl string) (RequestTime, error) {
 
 	requestTime.contentTransfer = time.Since(start)
 	requestTime.status = resp.Status
+
+	counter++
+	requestTime.id = counter
 
 	//log.Printf("Total time: %v\n", time.Since(start))
 	return requestTime, nil
