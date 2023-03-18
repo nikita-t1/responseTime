@@ -1,0 +1,75 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.20'
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Build Linux Binary
+        run: GOOS=linux GOARCH=amd64 go build -o bin/app-amd64-linux .
+
+      - name: Build Windows Binary
+        run: GOOS=windows GOARCH=amd64 go build -o bin/app-amd64-windows.exe .
+
+      - name: Build macOS Binary
+        run: GOOS=darwin GOARCH=amd64 go build -o bin/app-amd64-darwin .
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifact
+          path: |
+            ${{ github.workspace }}/bin/**
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.20'
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
+      - name: Install golint
+        run: go install golang.org/x/lint/golint@latest
+
+      - name: Run golint
+        run: golint ./...
+
+      - name: Run tests
+        run: go test -race -vet=off ./...
