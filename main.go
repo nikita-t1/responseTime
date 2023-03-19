@@ -6,11 +6,16 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"log"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type model struct {
+	Tabs      []string
+	activeTab int
+
 	requestTime   RequestTime
 	inputField    textinput.Model
 	feedback      string
@@ -39,6 +44,10 @@ func initialModel() model {
 
 	m.styles = DefaultStyles()
 	m.inputField = ti
+
+	tabs := []string{"Request", "History", "Help", "About"}
+	m.Tabs = tabs
+
 	return m
 }
 
@@ -77,6 +86,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Tick(m.requestTime.contentTransfer, func(_ time.Time) tea.Msg {
 				return debounceEnterKey(m.debounceEnterKey)
 			})
+		case "tab":
+			m.activeTab = m.getNextTab()
+			return m, nil
+		case "shift+tab":
+			m.activeTab = m.gePreviousTab()
+			return m, nil
 		}
 	}
 	m.inputField, cmd = m.inputField.Update(msg)
@@ -84,13 +99,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return lipgloss.JoinVertical(
-		lipgloss.Center,
-		m.styles.InputField.Render(m.inputField.View()),
-		m.feedback,
-		m.responseTableView(),
-	)
+	doc := strings.Builder{}
+
+	tabContent := m.selectTabContent()
+	tabView := m.tabView()
+
+	doc.WriteString(tabView)
+	doc.WriteString("\n")
+	doc.WriteString(m.styles.WindowStyle.Width(tabContentWidth).Render(tabContent))
+	return m.styles.DocStyle.Render(doc.String())
 }
+
+var tabContentWidth = 106
 
 func main() {
 	f, _ := tea.LogToFile("debug.log", "")
@@ -102,6 +122,64 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (m model) selectTabContent() string {
+	var view string
+	if m.activeTab == 0 {
+		view = lipgloss.JoinVertical(
+			lipgloss.Center,
+			m.styles.InputField.Render(m.inputField.View()),
+			m.feedback,
+			m.responseTableView(),
+		)
+	} else if m.activeTab == 1 {
+		view = "1"
+	} else if m.activeTab == 2 {
+		view = "2"
+	} else {
+		content, err := os.ReadFile("rick-ascii")
+		if err != nil {
+			content = []byte{}
+		}
+		text := string(content)
+		log.Printf(text)
+		view = lipgloss.NewStyle().
+			Padding(0, 1).
+			Italic(true).
+			Background(lipgloss.Color("#fc4c92")).
+			Foreground(lipgloss.Color("#ffffff")).
+			Render("Created by nikita-t1") +
+			"\n\nLink to Source Code: https://github.com/nikita-t1/responseTime\n\n"
+	}
+	return view
+}
+
+func (m model) tabView() string {
+	var renderedTabs []string
+
+	for i, t := range m.Tabs {
+		var style lipgloss.Style
+		isFirst, _, isActive := i == 0, i == len(m.Tabs)-1, i == m.activeTab
+		if isActive {
+			style = m.styles.ActiveTabStyle.Copy()
+		} else {
+			style = m.styles.InactiveTabStyle.Copy()
+		}
+		border, _, _, _, _ := style.GetBorder()
+		if isFirst && isActive {
+			border.BottomLeft = "│"
+		} else if isFirst && !isActive {
+			border.BottomLeft = "├"
+		}
+		style = style.Border(border)
+		renderedTabs = append(renderedTabs, style.Render(t))
+	}
+
+	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
+	rowFill := strings.Repeat("─", (tabContentWidth+1)-lipgloss.Width(row)) + "╮"
+	row = row + lipgloss.NewStyle().Foreground(m.styles.HighlightColor).Render(rowFill)
+	return row
 }
 
 func (m model) responseTableView() string {
@@ -141,5 +219,22 @@ func (m model) responseTableView() string {
 	m.responseTable.SetStyles(m.styles.Table)
 
 	return m.responseTable.View()
+}
 
+func (m model) getNextTab() int {
+	activeTab := m.activeTab
+	if activeTab < len(m.Tabs)-1 {
+		return activeTab + 1
+	} else {
+		return 0
+	}
+}
+
+func (m model) gePreviousTab() int {
+	activeTab := m.activeTab
+	if activeTab == 0 {
+		return len(m.Tabs) - 1
+	} else {
+		return activeTab - 1
+	}
 }
