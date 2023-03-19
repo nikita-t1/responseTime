@@ -112,12 +112,21 @@ func (m model) responseTableView() string {
 		ipList = append(ipList, table.Row{"        " + strconv.Itoa(index+1), addr.IP.String()})
 	}
 
+	statusColor := lipgloss.NewStyle()
+	if strings.HasPrefix(m.requestTime.status, "2") {
+		statusColor = m.styles.Success
+	} else if strings.HasPrefix(m.requestTime.status, "3") {
+		statusColor = m.styles.Warning
+	} else if strings.HasPrefix(m.requestTime.status, "4") || strings.HasPrefix(m.requestTime.status, "5") {
+		statusColor = m.styles.Error
+	}
+
 	var rows []table.Row
 	rows = []table.Row{
 		{"ID", strconv.Itoa(r.id)},
 		{"URL", r.url},
 		{"IP", r.ip},
-		{"Status", r.status},
+		{"Status", statusColor.Render(r.status)},
 		{"DNS Lookup", r.dnsLookup.String()},
 		{"TCP Connection", r.connectTime.String()},
 		{"TLS Handshake", r.tlsHandshake.String()},
