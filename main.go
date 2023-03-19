@@ -69,7 +69,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.feedback = "Loading"
 			resp, err := ExecuteRequest(m.inputField.Value())
 			if err != nil {
-				m.feedback = m.styles.Error.Render(err.Error())
+				m.feedback = m.styles.Error.Width(100).Align(lipgloss.Center).Render(err.Error())
 			} else {
 				m.feedback = m.styles.Success.Render("Successfully")
 				m.requestTime = resp
