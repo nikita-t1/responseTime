@@ -19,11 +19,16 @@ type model struct {
 	requestTime    RequestTime
 	inputField     textinput.Model
 	feedback       string
+	helpListItems  []helpItem
 	responseTable  table.Model
 	historyTable   table.Model
 	styles         *Styles
 
 	debounceEnterKey bool
+}
+
+type helpItem struct {
+	title, desc string
 }
 
 func initialModel() model {
@@ -73,6 +78,15 @@ func initialModel() model {
 
 	m.styles = DefaultStyles()
 	m.inputField = ti
+
+	m.helpListItems = []helpItem{
+		{title: "DNS Lookup", desc: "The time it takes to look up the IP-Address(es) associated with this domain name"},
+		{title: "TCP Connection", desc: "The time it takes to connect to the previously found IP-Address over TCP"},
+		{title: "TLS Handshake", desc: "The time it takes the two communicating sides to exchange messages to verify each other and establish the cryptographic algorithms they will use"},
+		{title: "Server Processing", desc: "The time that the server needs to process the request before sending a response."},
+		{title: "Content Transfer", desc: "The time that the server needs to send an response"},
+		{title: "Total", desc: "Combined Time of this whole Request"},
+	}
 
 	tabs := []string{"Request", "History", "Help", "About"}
 	m.Tabs = tabs
@@ -137,7 +151,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.historyTable.MoveUp(0)
 		}
 	}
-	m.inputField, cmd = m.inputField.Update(msg)
+	m.inputField, _ = m.inputField.Update(msg)
 	m.historyTable, cmd = m.historyTable.Update(msg)
 	return m, cmd
 }
@@ -180,10 +194,13 @@ func (m model) selectTabContent() string {
 		)
 	} else if m.activeTab == 1 {
 		view = m.historyTable.View()
-		log.Printf(view)
 		m.historyTable.Focus()
 	} else if m.activeTab == 2 {
-		view = "2"
+		for _, item := range m.helpListItems {
+			title := lipgloss.NewStyle().Width(100).Align(lipgloss.Left).Render(item.title)
+			desc := lipgloss.NewStyle().Width(100).Align(lipgloss.Left).Foreground(m.styles.SubduedColor).Render(item.desc)
+			view = view + title + "\n" + desc + "\n\n"
+		}
 	} else {
 		view = lipgloss.NewStyle().
 			Padding(0, 1).

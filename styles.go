@@ -18,6 +18,8 @@ type Styles struct {
 	InactiveTabStyle  lipgloss.Style
 	ActiveTabStyle    lipgloss.Style
 	WindowStyle       lipgloss.Style
+	VerySubduedColor  lipgloss.AdaptiveColor
+	SubduedColor      lipgloss.AdaptiveColor
 }
 
 func DefaultStyles() *Styles {
@@ -59,6 +61,8 @@ func DefaultStyles() *Styles {
 	s.ActiveTabStyle = s.InactiveTabStyle.Copy().Border(s.ActiveTabBorder, true)
 	s.WindowStyle = lipgloss.NewStyle().BorderForeground(s.HighlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 
+	s.VerySubduedColor = lipgloss.AdaptiveColor{Light: "#DDDADA", Dark: "#3C3C3C"}
+	s.SubduedColor = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#5C5C5C"}
 	return &s
 }
 
