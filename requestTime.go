@@ -22,6 +22,7 @@ type RequestTime struct {
 	tlsHandshake     time.Duration
 	serverProcessing time.Duration
 	contentTransfer  time.Duration
+	total            time.Duration
 }
 
 func NewRequestTime() RequestTime {
@@ -31,6 +32,7 @@ func NewRequestTime() RequestTime {
 		tlsHandshake:     time.Duration(0),
 		serverProcessing: time.Duration(0),
 		contentTransfer:  time.Duration(0),
+		total:            time.Duration(0),
 	}
 }
 
@@ -69,40 +71,31 @@ func ExecuteRequest(siteUrl string) (RequestTime, error) {
 		return NewRequestTime(), err
 	}
 
-	var start, connect, dns, tlsHandshake time.Time
+	var start, end, connectStart, connectDone, dnsStart, dnsDone, tlsHandshakeStart, tlsHandshakeDone, gotConn, firstResponseByte time.Time
 	requestTime := NewRequestTime()
 	requestTime.url = siteUrl
 
 	trace := &httptrace.ClientTrace{
-		DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
+		DNSStart: func(dsi httptrace.DNSStartInfo) { dnsStart = time.Now() },
 		DNSDone: func(ddi httptrace.DNSDoneInfo) {
-			requestTime.dnsLookup = time.Since(dns)
-			//log.Printf("DNS Done: %v\n", time.Since(dns))
+			dnsDone = time.Now()
 			requestTime.addrs = ddi.Addrs
 		},
 
-		TLSHandshakeStart: func() { tlsHandshake = time.Now() },
-		TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
-			requestTime.tlsHandshake = time.Since(tlsHandshake)
-			//log.Printf("TLS Handshake: %v\n", time.Since(tlsHandshake))
-			//log.Printf(cs.ServerName)
-		},
-
-		ConnectStart: func(network, addr string) { connect = time.Now() },
+		ConnectStart: func(network, addr string) { connectStart = time.Now() },
 		ConnectDone: func(network, addr string, err error) {
-			requestTime.connectTime = time.Since(connect)
-			//log.Printf("Connect time: %v\n", time.Since(connect))
+			connectDone = time.Now()
 			requestTime.ip = addr
 		},
 
-		GotFirstResponseByte: func() {
-			requestTime.serverProcessing = time.Since(start)
-			//log.Printf("Time from start to first byte: %v\n", time.Since(start))
-		},
+		TLSHandshakeStart: func() { tlsHandshakeStart = time.Now() },
+		TLSHandshakeDone:  func(cs tls.ConnectionState, err error) { tlsHandshakeDone = time.Now() },
+
+		GotConn:              func(info httptrace.GotConnInfo) { gotConn = time.Now() },
+		GotFirstResponseByte: func() { firstResponseByte = time.Now() },
 	}
 
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	start = time.Now()
 	transport := http.Transport{
 		DisableKeepAlives: true,
 
@@ -111,17 +104,33 @@ func ExecuteRequest(siteUrl string) (RequestTime, error) {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-	resp, err := transport.RoundTrip(req)
+	client := &http.Client{
+		Transport: &transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// always refuse to follow redirects, visit does that
+			// manually if required.
+			return http.ErrUseLastResponse
+		},
+	}
+	start = time.Now()
+	resp, err := client.Do(req)
+	//resp, err := transport.RoundTrip(req)
+	end = time.Now()
 	if err != nil {
 		return NewRequestTime(), err
 	}
 
-	requestTime.contentTransfer = time.Since(start)
 	requestTime.status = resp.Status
 
 	counter++
 	requestTime.id = counter
 
-	//log.Printf("Total time: %v\n", time.Since(start))
+	requestTime.dnsLookup = dnsDone.Sub(dnsStart)
+	requestTime.connectTime = connectDone.Sub(connectStart)
+	requestTime.tlsHandshake = tlsHandshakeDone.Sub(tlsHandshakeStart)
+	requestTime.serverProcessing = firstResponseByte.Sub(gotConn)
+	requestTime.contentTransfer = end.Sub(firstResponseByte)
+	requestTime.total = end.Sub(start)
+
 	return requestTime, nil
 }

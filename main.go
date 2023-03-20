@@ -208,7 +208,7 @@ func (m model) generateHistoryTableView() table.Model {
 			requestTime.tlsHandshake.String(),
 			requestTime.serverProcessing.String(),
 			requestTime.contentTransfer.String(),
-			requestTime.contentTransfer.String(),
+			requestTime.total.String(),
 		})
 	}
 	m.historyTable.SetRows(rows)
@@ -270,6 +270,7 @@ func (m model) responseTableView() string {
 		{"TLS Handshake", r.tlsHandshake.String()},
 		{"Server Processing", r.serverProcessing.String()},
 		{"Content Transfer", r.contentTransfer.String()},
+		{"Total", r.total.String()},
 		{"", ""},
 		{"Alternative Addrs:", ""},
 	}
