@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,11 +15,13 @@ type model struct {
 	Tabs      []string
 	activeTab int
 
-	requestTime   RequestTime
-	inputField    textinput.Model
-	feedback      string
-	responseTable table.Model
-	styles        *Styles
+	requestHistory []RequestTime
+	requestTime    RequestTime
+	inputField     textinput.Model
+	feedback       string
+	responseTable  table.Model
+	historyTable   table.Model
+	styles         *Styles
 
 	debounceEnterKey bool
 }
@@ -41,6 +42,34 @@ func initialModel() model {
 		table.WithHeight(20),
 	)
 	m.responseTable = responseTable
+
+	historyTable := table.New(
+		table.WithColumns(
+			[]table.Column{
+				{Title: "ID", Width: 3},
+				{Title: "URL", Width: 22},
+				//{Title: "IP", Width: 16},
+				{Title: "DNS", Width: 10},
+				{Title: "TCP", Width: 10},
+				{Title: "TLS", Width: 10},
+				{Title: "Server Processing", Width: 10},
+				{Title: "Transfer", Width: 10},
+				{Title: "Total", Width: 10},
+			}),
+		table.WithHeight(20),
+	)
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	historyTable.SetStyles(s)
+	m.historyTable = historyTable
 
 	m.styles = DefaultStyles()
 	m.inputField = ti
@@ -82,6 +111,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.feedback = m.styles.Success.Render("Successfully")
 				m.requestTime = resp
+				m.requestHistory = append(m.requestHistory, resp)
+				m.historyTable = m.generateHistoryTableView()
 			}
 			return m, tea.Tick(m.requestTime.contentTransfer, func(_ time.Time) tea.Msg {
 				return debounceEnterKey(m.debounceEnterKey)
@@ -92,21 +123,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.activeTab = m.gePreviousTab()
 			return m, nil
+		case "down":
+			m.historyTable.Focus()
+			if m.historyTable.Cursor() == -1 {
+				m.historyTable.SetCursor(0)
+			}
+			m.historyTable.MoveDown(0)
+		case "up":
+			m.historyTable.Focus()
+			if m.historyTable.Cursor() == -1 {
+				m.historyTable.SetCursor(0)
+			}
+			m.historyTable.MoveUp(0)
 		}
 	}
 	m.inputField, cmd = m.inputField.Update(msg)
+	m.historyTable, cmd = m.historyTable.Update(msg)
 	return m, cmd
 }
 
 func (m model) View() string {
 	doc := strings.Builder{}
 
-	tabContent := m.selectTabContent()
+	tabContent := m.selectTabContent() + "\n"
 	tabView := m.tabView()
 
 	doc.WriteString(tabView)
 	doc.WriteString("\n")
 	doc.WriteString(m.styles.WindowStyle.Width(tabContentWidth).Render(tabContent))
+
 	return m.styles.DocStyle.Render(doc.String())
 }
 
@@ -134,16 +179,12 @@ func (m model) selectTabContent() string {
 			m.responseTableView(),
 		)
 	} else if m.activeTab == 1 {
-		view = "1"
+		view = m.historyTable.View()
+		log.Printf(view)
+		m.historyTable.Focus()
 	} else if m.activeTab == 2 {
 		view = "2"
 	} else {
-		content, err := os.ReadFile("rick-ascii")
-		if err != nil {
-			content = []byte{}
-		}
-		text := string(content)
-		log.Printf(text)
 		view = lipgloss.NewStyle().
 			Padding(0, 1).
 			Italic(true).
@@ -153,6 +194,25 @@ func (m model) selectTabContent() string {
 			"\n\nLink to Source Code: https://github.com/nikita-t1/responseTime\n\n"
 	}
 	return view
+}
+
+func (m model) generateHistoryTableView() table.Model {
+	var rows []table.Row
+	for _, requestTime := range m.requestHistory {
+		rows = append(rows, table.Row{
+			lpad(strconv.Itoa(requestTime.id), "0", 3),
+			strings.ReplaceAll(requestTime.url, "https://", ""),
+			//requestTime.ip,
+			requestTime.dnsLookup.String(),
+			requestTime.connectTime.String(),
+			requestTime.tlsHandshake.String(),
+			requestTime.serverProcessing.String(),
+			requestTime.contentTransfer.String(),
+			requestTime.contentTransfer.String(),
+		})
+	}
+	m.historyTable.SetRows(rows)
+	return m.historyTable
 }
 
 func (m model) tabView() string {
@@ -201,7 +261,7 @@ func (m model) responseTableView() string {
 
 	var rows []table.Row
 	rows = []table.Row{
-		{"ID", strconv.Itoa(r.id)},
+		{"ID", lpad(strconv.Itoa(r.id), "0", 3)},
 		{"URL", r.url},
 		{"IP", r.ip},
 		{"Status", statusColor.Render(r.status)},
@@ -237,4 +297,11 @@ func (m model) gePreviousTab() int {
 	} else {
 		return activeTab - 1
 	}
+}
+
+func lpad(s string, pad string, plength int) string {
+	for i := len(s); i < plength; i++ {
+		s = pad + s
+	}
+	return s
 }
