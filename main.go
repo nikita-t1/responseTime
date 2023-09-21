@@ -1,19 +1,23 @@
 package main
 
 import (
+	"fmt"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type model struct {
-	Tabs      []string
-	activeTab int
+	width, height int
+	Tabs          []string
+	activeTab     int
 
 	requestHistory []RequestTime
 	requestTime    RequestTime
@@ -33,6 +37,9 @@ type helpItem struct {
 
 func initialModel() model {
 	m := model{}
+
+	m.width = 0
+	m.height = 0
 
 	ti := textinput.New()
 	ti.Placeholder = "https://google.com"
@@ -94,11 +101,18 @@ func initialModel() model {
 	return m
 }
 
+func tick() tea.Msg {
+	time.Sleep(time.Second / 4)
+	return tickMsg(1)
+}
+
 func (m model) Init() tea.Cmd {
-	return nil
+	return tick
 }
 
 type debounceEnterKey bool
+
+type tickMsg int
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -150,13 +164,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.historyTable.MoveUp(0)
 		}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case tickMsg:
+		w, h, _ := term.GetSize(int(os.Stdout.Fd()))
+		return m, tea.Batch(tick, func() tea.Msg { return tea.WindowSizeMsg{Width: w, Height: h} })
 	}
+
 	m.inputField, _ = m.inputField.Update(msg)
 	m.historyTable, cmd = m.historyTable.Update(msg)
 	return m, cmd
 }
 
 func (m model) View() string {
+	if m.width < 110 || m.height < 38 {
+		s := ""
+		s = "Terminal too small to display content\n"
+		s += "Please resize your terminal to at least 110x38\n\n"
+		width := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(fmt.Sprintf("Width: %d", m.width))
+		if m.width < 110 {
+			width = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Width: %d", m.width))
+		}
+		height := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(fmt.Sprintf("Height: %d", m.height))
+		if m.height < 38 {
+			height = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Height: %d", m.height))
+		}
+		s += "Your current terminal size is: " + fmt.Sprintf("%s x %s", width, height) + "\n\n"
+		return fmt.Sprintf(s)
+	}
 	doc := strings.Builder{}
 
 	tabContent := m.selectTabContent() + "\n"
@@ -166,7 +202,8 @@ func (m model) View() string {
 	doc.WriteString("\n")
 	doc.WriteString(m.styles.WindowStyle.Width(tabContentWidth).Render(tabContent))
 
-	return m.styles.DocStyle.Render(doc.String())
+	return m.styles.DocStyle.Render(doc.String() + "\n" + time.Now().String())
+	//return m.viewport.View()
 }
 
 var tabContentWidth = 106
@@ -177,6 +214,7 @@ func main() {
 	log.Printf("Start")
 
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+
 	_, err := p.Run()
 	if err != nil {
 		log.Fatal(err)
